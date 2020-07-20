@@ -63,7 +63,7 @@ open class SwipeCardStack: UIView, SwipeCardDelegate, UIGestureRecognizerDelegat
     return visibleCards.first?.index
   }
 
-  var numberOfVisibleCards: Int = 2
+  var numberOfVisibleCards: Int = 3
 
   /// An ordered array containing all pairs of currently visible cards.
   ///
@@ -137,13 +137,30 @@ open class SwipeCardStack: UIView, SwipeCardDelegate, UIGestureRecognizerDelegat
 
   func layoutCard(_ card: SwipeCard, at position: Int) {
     card.transform = .identity
-    card.frame = layoutProvider.createCardFrame(for: self)
+    if position == 0 {
+        card.frame = layoutProvider.createCardFrame(for: self)
+    } else if position == 1 {
+        let firstCardRect = layoutProvider.createCardFrame(for: self)
+        let heightBetweenCards = (firstCardRect.height - (firstCardRect.height * 0.95)) / 2
+        card.frame = CGRect(x: firstCardRect.origin.x, y: firstCardRect.origin.y - heightBetweenCards - 5, width: firstCardRect.width, height: firstCardRect.height)
+    } else {
+        let firstCardRect = layoutProvider.createCardFrame(for: self)
+        let heightBetweenCards = (firstCardRect.height - (firstCardRect.height * 0.9)) / 2
+        card.frame = CGRect(x: firstCardRect.origin.x, y: firstCardRect.origin.y - heightBetweenCards - 10, width: firstCardRect.width, height: firstCardRect.height)
+    }
+    
     card.transform = transform(forCardAtPosition: position)
     card.isUserInteractionEnabled = position == 0
   }
 
   func scaleFactor(forCardAtPosition position: Int) -> CGPoint {
-    return position == 0 ? CGPoint(x: 1, y: 1) : CGPoint(x: 0.95, y: 0.95)
+    if position == 0 {
+        return CGPoint(x: 1, y: 1)
+    } else if position == 1 {
+        return CGPoint(x: 0.95, y: 0.95)
+    } else {
+        return CGPoint(x: 0.9, y: 0.9)
+    }
   }
 
   func transform(forCardAtPosition position: Int) -> CGAffineTransform {
