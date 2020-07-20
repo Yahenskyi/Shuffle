@@ -139,10 +139,6 @@ open class SwipeCardStack: UIView, SwipeCardDelegate, UIGestureRecognizerDelegat
     card.transform = .identity
     if position == 0 {
         card.frame = layoutProvider.createCardFrame(for: self)
-    } else if position == 1 {
-        let firstCardRect = layoutProvider.createCardFrame(for: self)
-        let heightBetweenCards = (firstCardRect.height - (firstCardRect.height * 0.95)) / 2
-        card.frame = CGRect(x: firstCardRect.origin.x, y: firstCardRect.origin.y - heightBetweenCards - 10, width: firstCardRect.width, height: firstCardRect.height)
     } else {
         let firstCardRect = layoutProvider.createCardFrame(for: self)
         let heightBetweenCards = (firstCardRect.height - (firstCardRect.height * 0.9)) / 2
@@ -156,8 +152,6 @@ open class SwipeCardStack: UIView, SwipeCardDelegate, UIGestureRecognizerDelegat
   func scaleFactor(forCardAtPosition position: Int) -> CGPoint {
     if position == 0 {
         return CGPoint(x: 1, y: 1)
-    } else if position == 1 {
-        return CGPoint(x: 0.95, y: 0.95)
     } else {
         return CGPoint(x: 0.9, y: 0.9)
     }
