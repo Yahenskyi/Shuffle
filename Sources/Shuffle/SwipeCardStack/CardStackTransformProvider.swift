@@ -28,6 +28,9 @@ protocol CardStackTransformProvidable {
   func backgroundCardDragTransform(for cardStack: SwipeCardStack,
                                    topCard: SwipeCard,
                                    currentPosition: Int) -> CGAffineTransform
+  func backgroundCardDragAlpha(for cardStack: SwipeCardStack,
+                             topCard: SwipeCard,
+                             currentPosition: Int) -> CGFloat
   func backgroundCardTransformPercentage(for cardStack: SwipeCardStack, topCard: SwipeCard) -> CGFloat
 }
 
@@ -45,8 +48,23 @@ class CardStackTransformProvider: CardStackTransformProvidable {
 
     let scaleX = (1 - percentage) * currentScale.x + percentage * nextScale.x
     let scaleY = (1 - percentage) * currentScale.y + percentage * nextScale.y
+    
+    print(percentage)
 
     return CGAffineTransform(scaleX: scaleX, y: scaleY)
+  }
+    
+  func backgroundCardDragAlpha(for cardStack: SwipeCardStack,
+                                   topCard: SwipeCard,
+                                   currentPosition: Int) -> CGFloat {
+    let percentage = backgroundCardTransformPercentage(for: cardStack, topCard: topCard)
+    
+    if percentage >= 0.2 {
+        return percentage
+    } else {
+        return 0.2
+    }
+    
   }
 
   func backgroundCardTransformPercentage(for cardStack: SwipeCardStack, topCard: SwipeCard) -> CGFloat {
