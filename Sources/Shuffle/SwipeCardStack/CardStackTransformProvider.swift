@@ -59,10 +59,10 @@ class CardStackTransformProvider: CardStackTransformProvidable {
                                    currentPosition: Int) -> CGFloat {
     let percentage = backgroundCardTransformPercentage(for: cardStack, topCard: topCard)
     
-    if percentage >= 0.2 {
+    if percentage >= 0.3 {
         return percentage
     } else {
-        return 0.2
+        return 0.3
     }
     
   }
