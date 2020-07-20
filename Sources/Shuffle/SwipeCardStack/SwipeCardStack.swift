@@ -139,11 +139,12 @@ open class SwipeCardStack: UIView, SwipeCardDelegate, UIGestureRecognizerDelegat
     card.transform = .identity
     if position == 0 {
         card.frame = layoutProvider.createCardFrame(for: self)
+      card.alpha = 1.0
     } else {
         let firstCardRect = layoutProvider.createCardFrame(for: self)
         let heightBetweenCards = (firstCardRect.height - (firstCardRect.height * 0.9)) / 2
         card.frame = CGRect(x: firstCardRect.origin.x, y: firstCardRect.origin.y - heightBetweenCards - 10, width: firstCardRect.width, height: firstCardRect.height)
-        card.alpha = 0.2
+        card.alpha = 0.3
     }
     
     card.transform = transform(forCardAtPosition: position)
