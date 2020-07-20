@@ -156,13 +156,13 @@ class CardStackAnimator: CardStackAnimatable {
 
   func removeBackgroundCardAnimations(_ cardStack: SwipeCardStack) {
     cardStack.backgroundCards.forEach { $0.removeAllAnimations() }
-    cardStack.backgroundCards.forEach { $0.alpha = 0.2 }
+    cardStack.backgroundCards.forEach { $0.alpha = 0.3 }
   }
 
   func removeAllCardAnimations(_ cardStack: SwipeCardStack) {
     cardStack.visibleCards.forEach { $0.card.removeAllAnimations() }
     cardStack.visibleCards[0].card.alpha = 1.0
-    cardStack.visibleCards[1].card.alpha = 0.2
+    cardStack.visibleCards[1].card.alpha = 0.3
   }
 
   // MARK: - Animation Keyframes
@@ -188,7 +188,7 @@ class CardStackAnimator: CardStackAnimatable {
         if position == 0 {
             value.card.alpha = 1.0
         } else {
-            value.card.alpha = 0.2
+            value.card.alpha = 0.3
         }
       }
     }
