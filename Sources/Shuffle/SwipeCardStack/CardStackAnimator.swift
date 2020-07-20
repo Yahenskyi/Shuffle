@@ -161,7 +161,8 @@ class CardStackAnimator: CardStackAnimatable {
 
   func removeAllCardAnimations(_ cardStack: SwipeCardStack) {
     cardStack.visibleCards.forEach { $0.card.removeAllAnimations() }
-    cardStack.backgroundCards.forEach { $0.alpha = 1.0 }
+    cardStack.visibleCards[0].card.alpha = 1.0
+    cardStack.visibleCards[1].card.alpha = 0.2
   }
 
   // MARK: - Animation Keyframes
