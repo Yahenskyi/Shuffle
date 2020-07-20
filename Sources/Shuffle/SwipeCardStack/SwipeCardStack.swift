@@ -63,7 +63,7 @@ open class SwipeCardStack: UIView, SwipeCardDelegate, UIGestureRecognizerDelegat
     return visibleCards.first?.index
   }
 
-  var numberOfVisibleCards: Int = 3
+  var numberOfVisibleCards: Int = 2
 
   /// An ordered array containing all pairs of currently visible cards.
   ///
@@ -142,7 +142,7 @@ open class SwipeCardStack: UIView, SwipeCardDelegate, UIGestureRecognizerDelegat
     } else if position == 1 {
         let firstCardRect = layoutProvider.createCardFrame(for: self)
         let heightBetweenCards = (firstCardRect.height - (firstCardRect.height * 0.95)) / 2
-        card.frame = CGRect(x: firstCardRect.origin.x, y: firstCardRect.origin.y - heightBetweenCards - 5, width: firstCardRect.width, height: firstCardRect.height)
+        card.frame = CGRect(x: firstCardRect.origin.x, y: firstCardRect.origin.y - heightBetweenCards - 10, width: firstCardRect.width, height: firstCardRect.height)
     } else {
         let firstCardRect = layoutProvider.createCardFrame(for: self)
         let heightBetweenCards = (firstCardRect.height - (firstCardRect.height * 0.9)) / 2
