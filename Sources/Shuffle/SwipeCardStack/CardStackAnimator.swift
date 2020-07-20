@@ -22,452 +22,228 @@
 /// SOFTWARE.
 ///
 
-import UIKit
+import Foundation
 
-open class SwipeCardStack: UIView, SwipeCardDelegate, UIGestureRecognizerDelegate {
+protocol CardStackAnimatable {
+  func animateReset(_ cardStack: SwipeCardStack,
+                    topCard: SwipeCard)
+  func animateShift(_ cardStack: SwipeCardStack,
+                    withDistance distance: Int,
+                    animated: Bool,
+                    completion: ((Bool) -> Void)?)
+  func animateSwipe(_ cardStack: SwipeCardStack,
+                    topCard: SwipeCard,
+                    direction: SwipeDirection,
+                    forced: Bool,
+                    animated: Bool,
+                    completion: ((Bool) -> Void)?)
+  func animateUndo(_ cardStack: SwipeCardStack,
+                   topCard: SwipeCard,
+                   animated: Bool,
+                   completion: ((Bool) -> Void)?)
+  func removeAllCardAnimations(_ cardStack: SwipeCardStack)
+  func removeBackgroundCardAnimations(_ cardStack: SwipeCardStack)
+}
 
-  /// A internal structure for a `SwipeCard` and it's corresponding index in the card stack's `dataSource`.
-  struct Card {
-    var index: Int
-    var card: SwipeCard
-  }
+/// The background card animator for the card stack.
+///
+/// All methods should be called only after the `CardStackManager` has been updated.
+class CardStackAnimator: CardStackAnimatable {
 
-  open var animationOptions: CardStackAnimatableOptions = CardStackAnimationOptions.default
-
-  /// Return `false` if you wish to ignore all horizontal gestures on the card stack.
-  ///
-  /// You may wish to modify this property if your card stack is embedded in a `UIScrollView`, for example.
-  open var shouldRecognizeHorizontalDrag: Bool = true
-
-  /// Return `false` if you wish to ignore all vertical gestures on the card stack.
-  ///
-  /// You may wish to modify this property if your card stack is embedded in a `UIScrollView`, for example.
-  open var shouldRecognizeVerticalDrag: Bool = true
-
-  public weak var delegate: SwipeCardStackDelegate?
-
-  public weak var dataSource: SwipeCardStackDataSource? {
-    didSet {
-      reloadData()
-    }
-  }
-
-  public var cardStackInsets = UIEdgeInsets(top: 10, left: 10, bottom: 10, right: 10) {
-    didSet {
-      setNeedsLayout()
-    }
-  }
-
-  /// The data source index corresponding to the topmost card in the stack.
-  public var topCardIndex: Int? {
-    return visibleCards.first?.index
-  }
-
-  var numberOfVisibleCards: Int = 2
-
-  /// An ordered array containing all pairs of currently visible cards.
-  ///
-  /// The `Card` at the first position is the topmost `SwipeCard` in the view hierarchy.
-  var visibleCards: [Card] = []
-
-  var topCard: SwipeCard? {
-    return visibleCards.first?.card
-  }
-
-  var backgroundCards: [SwipeCard] {
-    return Array(visibleCards.dropFirst()).map { $0.card }
-  }
-
-  var isEnabled: Bool {
-    return !isAnimating && (topCard?.isUserInteractionEnabled ?? true)
-  }
-
-  var isAnimating: Bool = false
-
-  private var animator: CardStackAnimatable = CardStackAnimator.shared
-  private var layoutProvider: CardStackLayoutProvidable = CardStackLayoutProvider.shared
-  private var notificationCenter = NotificationCenter()
-  private var stateManager: CardStackStateManagable = CardStackStateManager()
-  private var transformProvider: CardStackTransformProvidable = CardStackTransformProvider.shared
-
-  private let cardContainer = UIView()
-
-  // MARK: - Initialization
-
-  override public init(frame: CGRect) {
-    super.init(frame: frame)
-    initialize()
-  }
-
-  public required init?(coder aDecoder: NSCoder) {
-    super.init(coder: aDecoder)
-    initialize()
-  }
-
-  convenience init(animator: CardStackAnimatable,
-                   layoutProvider: CardStackLayoutProvidable,
-                   notificationCenter: NotificationCenter,
-                   stateManager: CardStackStateManagable,
-                   transformProvider: CardStackTransformProvidable) {
-    self.init(frame: .zero)
-    self.animator = animator
-    self.layoutProvider = layoutProvider
-    self.notificationCenter = notificationCenter
-    self.stateManager = stateManager
-    self.transformProvider = transformProvider
-  }
-
-  private func initialize() {
-    addSubview(cardContainer)
-    notificationCenter.addObserver(self,
-                                   selector: #selector(didFinishSwipeAnimation),
-                                   name: CardDidFinishSwipeAnimationNotification,
-                                   object: nil)
-  }
-
-  // MARK: - Layout
-
-  override open func layoutSubviews() {
-    super.layoutSubviews()
-    cardContainer.frame = layoutProvider.createCardContainerFrame(for: self)
-    for (position, value) in visibleCards.enumerated() {
-      layoutCard(value.card, at: position)
-    }
-  }
-
-  func layoutCard(_ card: SwipeCard, at position: Int) {
-    card.transform = .identity
-    if position == 0 {
-        card.frame = layoutProvider.createCardFrame(for: self)
-    } else {
-        let firstCardRect = layoutProvider.createCardFrame(for: self)
-        let heightBetweenCards = (firstCardRect.height - (firstCardRect.height * 0.9)) / 2
-        card.frame = CGRect(x: firstCardRect.origin.x, y: firstCardRect.origin.y - heightBetweenCards - 10, width: firstCardRect.width, height: firstCardRect.height)
-        card.alpha = 0.2
-    }
-    
-    card.transform = transform(forCardAtPosition: position)
-    card.isUserInteractionEnabled = position == 0
-    
-  }
-
-  func scaleFactor(forCardAtPosition position: Int) -> CGPoint {
-    if position == 0 {
-        return CGPoint(x: 1, y: 1)
-    } else {
-        return CGPoint(x: 0.9, y: 0.9)
-    }
-  }
-
-  func transform(forCardAtPosition position: Int) -> CGAffineTransform {
-    let cardScaleFactor = scaleFactor(forCardAtPosition: position)
-    return CGAffineTransform(scaleX: cardScaleFactor.x, y: cardScaleFactor.y)
-  }
-
-  override open func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-    guard let topCard = topCard, topCard.panGestureRecognizer == gestureRecognizer else {
-      return super.gestureRecognizerShouldBegin(gestureRecognizer)
-    }
-
-    let velocity = topCard.panGestureRecognizer.velocity(in: self)
-
-    if abs(velocity.x) > abs(velocity.y) {
-      return shouldRecognizeHorizontalDrag
-    }
-
-    if abs(velocity.x) < abs(velocity.y) {
-      return shouldRecognizeVerticalDrag
-    }
-
-    return topCard.gestureRecognizerShouldBegin(gestureRecognizer)
-  }
+  static let shared = CardStackAnimator()
 
   // MARK: - Main Methods
 
-  /// Triggers a swipe on the card stack in the specified direction.
-  /// - Parameters:
-  ///   - direction: The direction to swipe the top card.
-  ///   - animated: A boolean indicating whether the swipe action should be animated.
-  public func swipe(_ direction: SwipeDirection, animated: Bool) {
-    if !isEnabled { return }
+  func animateReset(_ cardStack: SwipeCardStack,
+                    topCard: SwipeCard) {
+    removeBackgroundCardAnimations(cardStack)
 
-    if animated {
-      topCard?.swipe(direction: direction)
-    } else {
-      topCard?.removeFromSuperview()
-    }
-
-    if let topCard = topCard {
-      swipeAction(topCard: topCard,
-                  direction: direction,
-                  forced: true,
-                  animated: animated)
-    }
+    Animator.animateKeyFrames(withDuration: resetDuration(cardStack, topCard: topCard),
+                              options: .allowUserInteraction,
+                              animations: { [weak self] in
+                                self?.addCancelSwipeAnimationKeyFrames(cardStack) },
+                              completion: nil)
   }
 
-  func swipeAction(topCard: SwipeCard,
-                   direction: SwipeDirection,
-                   forced: Bool,
-                   animated: Bool) {
-    guard let swipedIndex = topCardIndex else { return }
-    stateManager.swipe(direction)
-    visibleCards.remove(at: 0)
+  func animateShift(_ cardStack: SwipeCardStack,
+                    withDistance distance: Int,
+                    animated: Bool,
+                    completion: ((Bool) -> Void)?) {
+    removeAllCardAnimations(cardStack)
 
-    // insert new card if needed
-    if (stateManager.remainingIndices.count - visibleCards.count) > 0 {
-      let bottomCardIndex = stateManager.remainingIndices[visibleCards.count]
-      if let card = loadCard(at: bottomCardIndex) {
-        insertCard(Card(index: bottomCardIndex, card: card), at: visibleCards.count)
+    if !animated {
+      for (position, value) in cardStack.visibleCards.enumerated() {
+        value.card.transform = cardStack.transform(forCardAtPosition: position)
       }
-    }
-
-    delegate?.cardStack?(self, didSwipeCardAt: swipedIndex, with: direction)
-
-    if stateManager.remainingIndices.isEmpty {
-      delegate?.didSwipeAllCards?(self)
+      completion?(true)
       return
     }
 
-    isAnimating = true
-    animator.animateSwipe(self,
-                          topCard: topCard,
-                          direction: direction,
-                          forced: forced,
-                          animated: animated) { [weak self] finished in
-                            if finished {
-                              self?.isAnimating = false
-                            }
+    // place background cards in old positions
+    for (position, value) in cardStack.visibleCards.enumerated() {
+      value.card.transform = cardStack.transform(forCardAtPosition: position + distance)
+    }
+
+    // animate background cards to new positions
+    Animator.animateKeyFrames(withDuration: shiftDuration(cardStack),
+                              animations: { [weak self] in
+                                self?.addShiftAnimationKeyFrames(cardStack) },
+                              completion: completion)
+  }
+
+  func animateSwipe(_ cardStack: SwipeCardStack,
+                    topCard: SwipeCard,
+                    direction: SwipeDirection,
+                    forced: Bool,
+                    animated: Bool,
+                    completion: ((Bool) -> Void)?) {
+    removeBackgroundCardAnimations(cardStack)
+
+    if !animated {
+      for (position, value) in cardStack.visibleCards.enumerated() {
+        cardStack.layoutCard(value.card, at: position)
+      }
+      completion?(true)
+      return
+    }
+
+    let delay = swipeDelay(for: topCard, forced: forced)
+    let duration = swipeDuration(cardStack,
+                                 topCard: topCard,
+                                 direction: direction,
+                                 forced: forced)
+
+    // no background cards left to animate, so we instead just delay calling the completion block
+    if cardStack.visibleCards.isEmpty {
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay + duration) {
+        completion?(true)
+      }
+      return
+    }
+
+    Animator.animateKeyFrames(withDuration: duration,
+                              delay: delay,
+                              animations: { [weak self] in
+                                self?.addSwipeAnimationKeyFrames(cardStack) },
+                              completion: completion)
+  }
+
+  func animateUndo(_ cardStack: SwipeCardStack,
+                   topCard: SwipeCard,
+                   animated: Bool,
+                   completion: ((Bool) -> Void)?) {
+    removeBackgroundCardAnimations(cardStack)
+
+    if !animated {
+      for (position, card) in cardStack.backgroundCards.enumerated() {
+        cardStack.layoutCard(card, at: position + 1)
+      }
+      completion?(true)
+      return
+    }
+
+    // place background cards in old positions
+    for (position, card) in cardStack.backgroundCards.enumerated() {
+      card.transform = cardStack.transform(forCardAtPosition: position)
+    }
+
+    // animate background cards to new positions
+    Animator.animateKeyFrames(withDuration: undoDuration(cardStack, topCard: topCard),
+                              animations: { [weak self] in
+                                self?.addUndoAnimationKeyFrames(cardStack) },
+                              completion: completion)
+  }
+
+  func removeBackgroundCardAnimations(_ cardStack: SwipeCardStack) {
+    cardStack.backgroundCards.forEach { $0.removeAllAnimations() }
+    cardStack.backgroundCards.forEach { $0.alpha = 0.2 }
+  }
+
+  func removeAllCardAnimations(_ cardStack: SwipeCardStack) {
+    cardStack.visibleCards.forEach { $0.card.removeAllAnimations() }
+    cardStack.backgroundCards.forEach { $0.alpha = 1.0 }
+  }
+
+  // MARK: - Animation Keyframes
+
+  func addCancelSwipeAnimationKeyFrames(_ cardStack: SwipeCardStack) {
+    for (position, card) in cardStack.backgroundCards.enumerated() {
+      let transform = cardStack.transform(forCardAtPosition: position + 1)
+      Animator.addTransformKeyFrame(to: card, transform: transform)
     }
   }
 
-  /// Returns the most recently swiped card to the top of the card stack.
-  /// - Parameter animated: A boolean indicating whether the undo action should be animated.
-  public func undoLastSwipe(animated: Bool) {
-    if !isEnabled { return }
-    guard let previousSwipe = stateManager.undoSwipe() else { return }
-
-    reloadVisibleCards()
-    delegate?.cardStack?(self, didUndoCardAt: previousSwipe.index, from: previousSwipe.direction)
-
-    if animated {
-      topCard?.reverseSwipe(from: previousSwipe.direction)
+  func addShiftAnimationKeyFrames(_ cardStack: SwipeCardStack) {
+    for (position, value) in cardStack.visibleCards.enumerated() {
+      let transform = cardStack.transform(forCardAtPosition: position)
+      Animator.addTransformKeyFrame(to: value.card, transform: transform)
     }
+  }
 
-    isAnimating = true
-    if let topCard = topCard {
-      animator.animateUndo(self,
-                           topCard: topCard,
-                           animated: animated) { [weak self] finished in
-                            if finished {
-                              self?.isAnimating = false
-                            }
+  func addSwipeAnimationKeyFrames(_ cardStack: SwipeCardStack) {
+    for (position, value) in cardStack.visibleCards.enumerated() {
+      Animator.addKeyFrame {
+        cardStack.layoutCard(value.card, at: position)
+        if position == 0 {
+            value.card.alpha = 1.0
+        } else {
+            value.card.alpha = 0.2
+        }
       }
     }
   }
 
-  /// Shifts the remaining cards in the card stack by the specified distance. Any swiped cards are ignored.
-  /// - Parameters:
-  ///   - distance: The distance to shift the remaining cards by.
-  ///   - animated: A boolean indicating whether the undo action should be animated.
-  public func shift(withDistance distance: Int = 1, animated: Bool) {
-    if !isEnabled || distance == 0 || visibleCards.count <= 1 { return }
-
-    stateManager.shift(withDistance: distance)
-    reloadVisibleCards()
-
-    isAnimating = true
-    animator.animateShift(self,
-                          withDistance: distance,
-                          animated: animated) { [weak self] finished in
-                            if finished {
-                              self?.isAnimating = false
-                            }
-    }
-  }
-
-  // MARK: - Data Source
-
-  public func reloadData() {
-    guard let dataSource = dataSource else { return }
-    let numberOfCards = dataSource.numberOfCards(in: self)
-    stateManager.reset(withNumberOfCards: numberOfCards)
-    reloadVisibleCards()
-    isAnimating = false
-  }
-
-  /// Returns the `SwipeCard` at the specified index.
-  /// - Parameter index: The index of the card in the data source.
-  /// - Returns: The `SwipeCard` at the specified index, or `nil` if the card is not visible or the index is
-  /// out of range.
-  public func card(forIndexAt index: Int) -> SwipeCard? {
-    for value in visibleCards where value.index == index {
-      return value.card
-    }
-    return nil
-  }
-
-  func reloadVisibleCards() {
-    visibleCards.forEach { $0.card.removeFromSuperview() }
-    visibleCards.removeAll()
-
-    let numberOfCards = min(stateManager.remainingIndices.count, numberOfVisibleCards)
-    for position in 0..<numberOfCards {
-      let index = stateManager.remainingIndices[position]
-      if let card = loadCard(at: index) {
-        insertCard(Card(index: index, card: card), at: position)
+  func addUndoAnimationKeyFrames(_ cardStack: SwipeCardStack) {
+    for (position, card) in cardStack.backgroundCards.enumerated() {
+      Animator.addKeyFrame {
+        cardStack.layoutCard(card, at: position + 1)
       }
     }
   }
 
-  func insertCard(_ value: Card, at position: Int) {
-    cardContainer.insertSubview(value.card, at: visibleCards.count - position)
-    layoutCard(value.card, at: position)
-    visibleCards.insert(value, at: position)
+  // MARK: - Animation Calculations
+
+  func resetDuration(_ cardStack: SwipeCardStack, topCard: SwipeCard) -> TimeInterval {
+    return cardStack.animationOptions.resetDuration
+      ??  topCard.animationOptions.totalResetDuration / 2
   }
 
-  func loadCard(at index: Int) -> SwipeCard? {
-    let card = dataSource?.cardStack(self, cardForIndexAt: index)
-    card?.delegate = self
-    card?.panGestureRecognizer.delegate = self
-    return card
+  func shiftDuration(_ cardStack: SwipeCardStack) -> TimeInterval {
+    return cardStack.animationOptions.shiftDuration
   }
 
-  // MARK: - State Management
-
-  /// Returns the current position of the card at the specified index.
-  ///
-  /// A returned value of `0` indicates that the card is the topmost card in the stack.
-  /// - Parameter index: The index of the card in the data source.
-  /// - Returns: The current position of the card at the specified index, or `nil` if the index if out of range or the
-  /// card has been swiped.
-  public func positionforCard(at index: Int) -> Int? {
-    return stateManager.remainingIndices.firstIndex(of: index)
+  func swipeDelay(for topCard: SwipeCard, forced: Bool) -> TimeInterval {
+    let duration = topCard.animationOptions.totalSwipeDuration
+    let relativeOverlayDuration = topCard.animationOptions.relativeSwipeOverlayFadeDuration
+    let delay = duration * TimeInterval(relativeOverlayDuration)
+    return forced ? delay : 0
   }
 
-  /// Returns the remaining number of cards in the card stack.
-  /// - Returns: The number of cards in the card stack which have not yet been swiped.
-  public func numberOfRemainingCards() -> Int {
-    return stateManager.remainingIndices.count
-  }
-
-  /// Inserts a new card with the given index at the specified position.
-  /// - Parameters:
-  ///   - index: The index of the card in the data source.
-  ///   - position: The position of the new card in the card stack.
-  public func insertCard(atIndex index: Int, position: Int) {
-    guard let dataSource = dataSource else { return }
-
-    let oldNumberOfCards = stateManager.totalIndexCount
-    let newNumberOfCards = dataSource.numberOfCards(in: self)
-
-    stateManager.insert(index, at: position)
-
-    if newNumberOfCards != oldNumberOfCards + 1 {
-      let errorString = StringUtils.createInvalidUpdateErrorString(newCount: newNumberOfCards,
-                                                                   oldCount: oldNumberOfCards,
-                                                                   insertedCount: 1)
-      fatalError(errorString)
+  func swipeDuration(_ cardStack: SwipeCardStack,
+                     topCard: SwipeCard,
+                     direction: SwipeDirection,
+                     forced: Bool) -> TimeInterval {
+    if let swipeDuration = cardStack.animationOptions.swipeDuration {
+      return swipeDuration
     }
 
-    reloadVisibleCards()
-  }
-
-  /// Appends a collection of new cards with the specifed indices to the bottom of the card stack.
-  /// - Parameter indices: The indices of the cards in the data source.
-  public func appendCards(atIndices indices: [Int]) {
-    guard let dataSource = dataSource else { return }
-
-    let oldNumberOfCards = stateManager.totalIndexCount
-    let newNumberOfCards = dataSource.numberOfCards(in: self)
-
-    for index in indices {
-      stateManager.insert(index, at: numberOfRemainingCards())
+    if forced {
+      return topCard.animationOptions.totalSwipeDuration / 2
     }
 
-    if newNumberOfCards != oldNumberOfCards + indices.count {
-      let errorString = StringUtils.createInvalidUpdateErrorString(newCount: newNumberOfCards,
-                                                                   oldCount: oldNumberOfCards,
-                                                                   insertedCount: indices.count)
-      fatalError(errorString)
+    let velocityFactor = topCard.dragSpeed(on: direction) / topCard.minimumSwipeSpeed(on: direction)
+
+    // card swiped below the minimum swipe speed
+    if velocityFactor < 1.0 {
+      return topCard.animationOptions.totalSwipeDuration / 2
     }
 
-    reloadVisibleCards()
+    // card swiped at least the minimum swipe speed -> return relative duration
+    return 1.0 / (2.0 * TimeInterval(velocityFactor))
   }
 
-  /// Deletes the card at the specified index.
-  /// - Parameter index: The index of the card in the data source.
-  public func deleteCard(atIndex index: Int) {
-    guard let dataSource = dataSource else { return }
-
-    let oldNumberOfCards = stateManager.totalIndexCount
-    let newNumberOfCards = dataSource.numberOfCards(in: self)
-
-    stateManager.delete(index)
-
-    if newNumberOfCards != oldNumberOfCards - 1 {
-      let errorString = StringUtils.createInvalidUpdateErrorString(newCount: newNumberOfCards,
-                                                                   oldCount: oldNumberOfCards,
-                                                                   deletedCount: 1)
-      fatalError(errorString)
-    }
-
-    reloadVisibleCards()
-  }
-
-  /// Deletes the card at the specified position in the card stack.
-  /// - Parameter position: The position of the card to delete in the card stack.
-  public func deleteCard(atPosition position: Int) {
-    guard let dataSource = dataSource else { return }
-
-    let oldNumberOfCards = stateManager.totalIndexCount
-    let newNumberOfCards = dataSource.numberOfCards(in: self)
-
-    stateManager.delete(indexAtPosition: position)
-
-    if newNumberOfCards != oldNumberOfCards - 1 {
-      let errorString = StringUtils.createInvalidUpdateErrorString(newCount: newNumberOfCards,
-                                                                   oldCount: oldNumberOfCards,
-                                                                   deletedCount: 1)
-      fatalError(errorString)
-    }
-
-    reloadVisibleCards()
-  }
-
-  // MARK: - Notifications
-
-  @objc
-  func didFinishSwipeAnimation(_ notification: NSNotification) {
-    guard let card = notification.object as? SwipeCard else { return }
-    card.removeFromSuperview()
-  }
-
-  // MARK: - SwipeCardDelegate
-
-  func card(didTap card: SwipeCard) {
-    guard let topCardIndex = topCardIndex else { return }
-    delegate?.cardStack?(self, didSelectCardAt: topCardIndex)
-  }
-
-  func card(didBeginSwipe card: SwipeCard) {
-    animator.removeBackgroundCardAnimations(self)
-  }
-
-  func card(didContinueSwipe card: SwipeCard) {
-    for (position, backgroundCard) in backgroundCards.enumerated() {
-      backgroundCard.transform = transformProvider.backgroundCardDragTransform(for: self,
-                                                                               topCard: card,
-                                                                               currentPosition: position + 1)
-        backgroundCard.alpha = transformProvider.backgroundCardDragAlpha(for: self, topCard: card, currentPosition: position + 1)
-    }
-  }
-
-  func card(didCancelSwipe card: SwipeCard) {
-    animator.animateReset(self, topCard: card)
-  }
-
-  func card(didSwipe card: SwipeCard,
-            with direction: SwipeDirection) {
-    swipeAction(topCard: card, direction: direction, forced: false, animated: true)
+  func undoDuration(_ cardStack: SwipeCardStack, topCard: SwipeCard) -> TimeInterval {
+    return cardStack.animationOptions.undoDuration
+      ?? topCard.animationOptions.totalReverseSwipeDuration / 2
   }
 }
